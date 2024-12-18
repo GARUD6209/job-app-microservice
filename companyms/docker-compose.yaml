@@ -1,0 +1,145 @@
+services:
+  postgres:
+    container_name: postgres_container
+    image: postgres
+    environment:
+      POSTGRES_USER: garudx
+      POSTGRES_PASSWORD: garudx
+      PGDATA: /data/postgres
+    volumes:
+      - postgres:/data/postgres
+    ports:
+      - "5432:5432"
+    networks:
+      - postgres
+    restart: unless-stopped
+
+  pgadmin:
+    container_name: pgadmin_container
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-pgadmin4@pgadmin.org}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    volumes:
+      - pgadmin:/var/lib/pgadmin
+    ports:
+      - "5050:80"
+    networks:
+      - postgres
+    restart: unless-stopped
+
+  zipkin:
+    container_name: zipkin
+    image: openzipkin/zipkin
+    ports:
+      - "9411:9411"
+    networks:
+      - app_network
+      - postgres
+
+  rabbitmq:
+    container_name: rabbitmq
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - app_network
+      - postgres
+
+  gateway:
+    image: garud6209/gateway:latest
+    container_name: gateway
+    ports:
+      - "8084:8084" # Adjust as needed
+    depends_on:
+      - servicereg
+    networks:
+      - app_network
+      - postgres
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://servicereg:8761/eureka
+
+  configserver:
+    image: garud6209/configserver:latest
+    container_name: configserver
+    ports:
+      - "8080:8080"
+    depends_on:
+      - servicereg
+    networks:
+      - app_network
+      - postgres
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+
+  review:
+    image: garud6209/review:latest
+    container_name: review
+    ports:
+      - "8083:8083" # Adjust as needed
+    depends_on:
+      - servicereg
+      - configserver
+    networks:
+      - app_network
+      - postgres
+    environment:
+      - SPRING_PROFILES_ACTIVE=k8st
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://servicereg:8761/eureka
+
+  job:
+    image: garud6209/job:latest
+    container_name: job
+    ports:
+      - "8082:8082" # Adjust as needed
+    depends_on:
+      - servicereg
+      - configserver
+    networks:
+      - app_network
+      - postgres
+    environment:
+      - SPRING_PROFILES_ACTIVE=k8st
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://servicereg:8761/eureka
+
+  company:
+    image: garud6209/company:latest
+    container_name: company
+    ports:
+      - "8081:8081" # Adjust as needed
+    depends_on:
+      - servicereg
+      - configserver
+    networks:
+      - app_network
+      - postgres
+    environment:
+      - SPRING_PROFILES_ACTIVE=k8st
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://servicereg:8761/eureka
+
+  servicereg:
+    image: garud6209/servicereg:latest
+    container_name: servicereg
+    ports:
+      - "8761:8761"
+    depends_on:
+     - rabbitmq
+     - zipkin
+     - postgres
+     - pgadmin
+    networks:
+      - app_network
+      - postgres
+
+networks:
+  app_network:
+    driver: bridge
+  postgres:
+    driver: bridge
+
+volumes:
+  postgres:
+  pgadmin:
